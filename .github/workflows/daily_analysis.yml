@@ -1,4 +1,4 @@
-name: 每日股票分析 V5.6 Ultimate
+name: 每日股票分析
 
 on:
   schedule:
@@ -40,8 +40,7 @@ jobs:
           STOCK_LIST: ${{ secrets.STOCK_LIST }}
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-        run: |
-          python - <<EOF
+        run: python - <<EOF
 import os, datetime, json, base64, requests
 import pandas as pd
 import yfinance as yf
@@ -105,7 +104,7 @@ if api_key:
 
 md_file = "reports/summary_report.md"
 with open(md_file,"w",encoding="utf-8") as f:
-    f.write(f"# 📊 A股智能日报 V5.6 Ultimate\n🕒 {today}\n\n")
+    f.write(f"# 📊 每日股票分析 V5.6 Ultimate\n🕒 {today}\n\n")
     f.write("## 📊 个股收盘价及技术指标\n")
     for s,v in stock_info.items():
         mark = " ⚠️" if s in alert_stocks else ""
@@ -122,3 +121,19 @@ if push_token:
         content += f"![收盘价分布](data:image/png;base64,{img_to_base64(chart_bar)})\n\n"
     for s,img in stock_imgs.items():
         if s in alert_stocks:
+            content += f"## {s} K线图\n![K线图](data:image/png;base64,{img_to_base64(img)})\n\n"
+    if alert_stocks:
+        content += f"⚠️ 今日涨跌超过 ±{ALERT_THRESHOLD}% 的股票: {','.join(alert_stocks)}\n"
+    data = {"token": push_token,"title":f"📈 每日股票分析","content":content,"template":"markdown"}
+    try:
+        r = requests.post("http://www.pushplus.plus/send", json=data)
+        print("✅ PushPlus 推送成功:", r.text)
+    except Exception as e:
+        print("⚠️ PushPlus 推送失败:", e)
+EOF
+
+      - name: 上传报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: analysis-report
+          path: reports/
