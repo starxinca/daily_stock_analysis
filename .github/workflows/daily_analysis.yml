@@ -3,8 +3,8 @@ name: 每日股票分析 V5.6 Ultimate
 on:
   schedule:
     # 每天北京时间 18:00 自动运行 (UTC 10:00)
-    - cron: '0 10 * * 1-5'  # 周一到周五
-  workflow_dispatch: {}      # 支持手动触发
+    - cron: '0 10 * * 1-5'
+  workflow_dispatch: {}  # 支持手动触发
 
 jobs:
   analyze:
@@ -122,19 +122,3 @@ if push_token:
         content += f"![收盘价分布](data:image/png;base64,{img_to_base64(chart_bar)})\n\n"
     for s,img in stock_imgs.items():
         if s in alert_stocks:
-            content += f"## {s} K线图\n![K线图](data:image/png;base64,{img_to_base64(img)})\n\n"
-    if alert_stocks:
-        content += f"⚠️ 今日涨跌超过 ±{ALERT_THRESHOLD}% 的股票: {','.join(alert_stocks)}\n"
-    data = {"token": push_token,"title":f"📈 A股智能日报 V5.6","content":content,"template":"markdown"}
-    try:
-        r = requests.post("http://www.pushplus.plus/send", json=data)
-        print("✅ PushPlus 推送成功:", r.text)
-    except Exception as e:
-        print("⚠️ PushPlus 推送失败:", e)
-EOF
-
-      - name: 上传报告
-        uses: actions/upload-artifact@v4
-        with:
-          name: analysis-report
-          path: reports/
