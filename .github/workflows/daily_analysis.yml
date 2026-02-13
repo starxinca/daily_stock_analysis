@@ -30,16 +30,11 @@ jobs:
         run: |
           mkdir -p reports data logs charts
 
-      - name: 执行股票分析（不推送）
+      - name: 执行股票分析并推送汇总
         env:
           STOCK_LIST: ${{ secrets.STOCK_LIST }}
-        run: python main.py --no-notify
-
-      - name: 汇总 + 智谱 AI 专业投顾 + 单股重点分析
-        env:
-          STOCK_LIST: ${{ secrets.STOCK_LIST }}
-          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         run: python - <<EOF
 import os, datetime, json, base64, requests
 import pandas as pd
@@ -88,6 +83,7 @@ if prices:
     plt.savefig(chart_bar)
     plt.close()
 
+# 调用智谱 AI
 api_key = os.getenv("ZHIPU_API_KEY")
 prompt = f"请对以下自选股生成今日市场专业投顾分析，包含短中长线建议:\n{','.join(stocks)}\n"
 prompt += "\n".join([f"{s}: 收盘{v['close']} 涨跌{v['change']}% MACD{v['MACD']} RSI{v['RSI']}" for s,v in stock_info.items()])
@@ -102,6 +98,7 @@ if api_key:
     except Exception as e:
         ai_text = f"⚠️ AI 调用失败: {e}"
 
+# 生成 Markdown 报告
 md_file = "reports/summary_report.md"
 with open(md_file,"w",encoding="utf-8") as f:
     f.write(f"# 📊 每日股票分析 V5.6 Ultimate\n🕒 {today}\n\n")
@@ -111,6 +108,7 @@ with open(md_file,"w",encoding="utf-8") as f:
         f.write(f"- {s}: 收盘{v['close']} 涨跌{v['change']}% MACD{v['MACD']} RSI{v['RSI']}{mark}\n")
     f.write("\n## 🧠 AI 专业投顾分析\n" + ai_text + "\n")
 
+# PushPlus 汇总推送
 push_token = os.getenv("PUSHPLUS_TOKEN")
 if push_token:
     def img_to_base64(path):
@@ -120,8 +118,7 @@ if push_token:
     if prices:
         content += f"![收盘价分布](data:image/png;base64,{img_to_base64(chart_bar)})\n\n"
     for s,img in stock_imgs.items():
-        if s in alert_stocks:
-            content += f"## {s} K线图\n![K线图](data:image/png;base64,{img_to_base64(img)})\n\n"
+        content += f"## {s} K线图\n![K线图](data:image/png;base64,{img_to_base64(img)})\n\n"
     if alert_stocks:
         content += f"⚠️ 今日涨跌超过 ±{ALERT_THRESHOLD}% 的股票: {','.join(alert_stocks)}\n"
     data = {"token": push_token,"title":f"📈 每日股票分析","content":content,"template":"markdown"}
