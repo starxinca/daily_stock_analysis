@@ -24,31 +24,31 @@ concurrency:
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
+    timeout-minutes: 60
+
     steps:
       - name: 随机延迟（避免固定时间访问）
         run: sleep $((RANDOM % 60))
-      
+
       - name: 检出代码
         uses: actions/checkout@v4
-      
+
       - name: 设置 Python 环境
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
+
       - name: 安装依赖
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-      
+
       - name: 创建必要目录
         run: |
           mkdir -p data logs reports
-      
-      - name: 执行股票分析并推送 PushPlus
+
+      - name: 执行每股分析并单独 PushPlus 推送
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           SINGLE_STOCK_NOTIFY: 'true'
@@ -56,36 +56,35 @@ jobs:
           STOCK_LIST: ${{ secrets.STOCK_LIST || '600519,300750,002594' }}
         run: |
           MODE="${{ github.event.inputs.mode || 'full' }}"
-          
           echo "=========================================="
           echo "🚀 A股自选股智能分析系统"
           echo "⏰ 时间: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
           echo "🎯 运行模式: $MODE"
-          echo "📊 自选股: $STOCK_LIST"
+
+          IFS=',' read -ra STOCKS_ARRAY <<< "$STOCK_LIST"
+          echo "📊 自选股列表:"
+          for stock in "${STOCKS_ARRAY[@]}"; do
+            echo "  - $stock"
+          done
           echo "📝 报告类型: $REPORT_TYPE"
-          echo ""
-          echo "✅ PushPlus Token 已配置: ${PUSHPLUS_TOKEN:0:6}******"
-          echo "✅ SINGLE_STOCK_NOTIFY=${SINGLE_STOCK_NOTIFY}"
-          echo "✅ REPORT_TYPE=${REPORT_TYPE}"
           echo "=========================================="
           echo ""
 
-          # 执行分析（新版 main.py 不需要 --pushplus 参数）
-          if [ "$MODE" = "market-only" ]; then
-            python main.py --market-review
-          elif [ "$MODE" = "stocks-only" ]; then
-            python main.py --no-market-review
-          else
-            python main.py
-          fi
+          # 循环每只股票分析并推送
+          for stock in "${STOCKS_ARRAY[@]}"; do
+            echo "🔹 开始分析股票 $stock"
+            
+            # 执行单股分析
+            python main.py --stocks "$stock" --single-notify
 
-          # 日志提示：推送是否已执行
-          if [ $? -eq 0 ]; then
-            echo "✅ PushPlus 推送命令已执行（请检查微信是否收到消息）"
-          else
-            echo "❌ PushPlus 推送失败，请查看 main.py 日志"
-          fi
-      
+            # 推送状态
+            if [ $? -eq 0 ]; then
+              echo "✅ 股票 $stock 分析完成，PushPlus 推送成功"
+            else
+              echo "❌ 股票 $stock 分析失败或 PushPlus 推送失败"
+            fi
+          done
+
       - name: 上传分析报告
         uses: actions/upload-artifact@v4
         if: always()
@@ -95,22 +94,22 @@ jobs:
             reports/
             logs/
           retention-days: 30
-      
-      - name: 显示运行结果
+
+      - name: 显示每股完整日志
         if: always()
         run: |
           echo ""
           echo "=========================================="
-          echo "📊 分析完成"
+          echo "📊 每股完整分析日志"
           echo "=========================================="
-          if [ -d "reports" ] && [ "$(ls -A reports 2>/dev/null)" ]; then
-            echo "生成的报告:"
-            ls -la reports/
+
+          LOG_FILE=$(ls -t logs/stock_analysis_*.log | head -n1)
+          if [ -f "$LOG_FILE" ]; then
+            IFS=',' read -ra STOCKS_ARRAY <<< "$STOCK_LIST"
+            for stock in "${STOCKS_ARRAY[@]}"; do
+              echo ""
+              echo "================== $stock =================="
+              grep -A 1000 -E "^$stock:" "$LOG_FILE" || echo "⚠️ $stock 日志未找到"
+            done
           else
-            echo "⚠️ 未生成报告文件"
-          fi
-          echo ""
-          if [ -f "logs/stock_analysis_$(date +%Y%m%d).log" ]; then
-            echo "📜 最近日志（最后 30 行）:"
-            tail -30 logs/stock_analysis_*.log 2>/dev/null || echo "无日志"
-          fi
+            echo "⚠️ 未找到日志文件"
