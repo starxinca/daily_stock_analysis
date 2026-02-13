@@ -1,10 +1,8 @@
 name: 每日股票分析
 
 on:
-  # 定时触发 - 每天北京时间 18:00 (UTC 10:00)
   schedule:
     - cron: '0 10 * * 1-5'
-  # 手动触发
   workflow_dispatch:
     inputs:
       mode:
@@ -25,6 +23,7 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -40,30 +39,20 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 创建必要目录
-        run: |
-          mkdir -p data logs reports
+      - name: 创建目录
+        run: mkdir -p data logs reports
 
-      - name: 执行每日股票分析
+      - name: 执行每日股票分析并推送汇总
         shell: bash
         env:
-          # AI 配置
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
-
-          # 数据源
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
-
-          # 推送配置
-          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-
-          # 自选股
           STOCK_LIST: ${{ secrets.STOCK_LIST }}
-
-          # 运行配置
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           REPORT_TYPE: ${{ secrets.REPORT_TYPE || 'full' }}
         run: |
           MODE="${{ github.event.inputs.mode || 'full' }}"
@@ -74,6 +63,7 @@ jobs:
           echo "📊 自选股: $STOCK_LIST"
           echo "=========================================="
 
+          # 执行 Python 分析
           if [ "$MODE" = "market-only" ]; then
             python scripts/daily_analysis.py --market-review
           elif [ "$MODE" = "stocks-only" ]; then
@@ -82,25 +72,12 @@ jobs:
             python scripts/daily_analysis.py
           fi
 
-      - name: 上传报告
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: analysis-reports-${{ github.run_number }}
-          path: |
-            reports/
-            logs/
-          retention-days: 30
-
-      - name: 显示结果
-        if: always()
-        run: |
-          echo "=========================================="
-          echo "📊 分析完成"
-          echo "=========================================="
-          if [ -d "reports" ] && [ "$(ls -A reports 2>/dev/null)" ]; then
-            echo "生成的报告:"
-            ls -la reports/
+          # 汇总报告文件
+          SUMMARY_FILE="reports/summary.md"
+          if [ -f "$SUMMARY_FILE" ]; then
+            CONTENT=$(cat "$SUMMARY_FILE" | sed ':a;N;$!ba;s/\n/%0A/g')
+            curl -s "http://www.pushplus.plus/send?token=$PUSHPLUS_TOKEN&title=每日股票分析&content=$CONTENT"
+            echo "✅ PushPlus 推送成功"
           else
-            echo "⚠️ 未生成报告文件"
-          fi
+            echo "⚠️ 未生成 summary.md 文件，推送失败"
+
