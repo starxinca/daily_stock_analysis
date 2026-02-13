@@ -1,19 +1,9 @@
-name: 每日股票分析
+name: 每日股票分析（汇总推送）
 
 on:
   schedule:
-    - cron: '0 10 * * 1-5'  # 每天北京时间 18:00
+    - cron: '0 10 * * 1-5'   # 每周一到周五 10:00 UTC = 18:00 北京时间
   workflow_dispatch:
-    inputs:
-      mode:
-        description: '运行模式'
-        required: true
-        default: 'full'
-        type: choice
-        options:
-          - full
-          - market-only
-          - stocks-only
 
 concurrency:
   group: stock-analysis
@@ -22,16 +12,13 @@ concurrency:
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
-      - name: 随机延迟（避免固定时间访问）
-        run: sleep $((RANDOM % 60))
-
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 设置 Python 环境
+      - name: 设置 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -42,50 +29,35 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 创建必要目录
+      - name: 创建目录
         run: |
           mkdir -p data logs reports
 
-      - name: 执行每股分析并单独 PushPlus 推送
+      - name: 分析股票并汇总推送
         env:
-          # ---------- 智谱 AI 配置 ----------
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}        # 智谱 AI Key
-          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}    # 智谱 API 地址
-          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}          # 智谱模型名称，例如 ZhipuChat-GLM-6B
-          
-          # ---------- PushPlus 配置 ----------
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-          SINGLE_STOCK_NOTIFY: 'true'
-          REPORT_TYPE: 'full'
-          STOCK_LIST: ${{ secrets.STOCK_LIST || '600519,300750,002594' }}
-
+          STOCK_LIST: ${{ secrets.STOCK_LIST }}
+          REPORT_TYPE: full
         run: |
-          MODE="${{ github.event.inputs.mode || 'full' }}"
           echo "=========================================="
-          echo "🚀 A股自选股智能分析系统（智谱 AI）"
+          echo "🚀 A股自选股智能分析系统（汇总推送）"
           echo "⏰ 时间: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
-          echo "🎯 运行模式: $MODE"
-
-          IFS=',' read -ra STOCKS_ARRAY <<< "$STOCK_LIST"
-          echo "📊 自选股列表:"
-          for stock in "${STOCKS_ARRAY[@]}"; do
-            echo "  - $stock"
-          done
+          echo "📊 自选股: $STOCK_LIST"
           echo "📝 报告类型: $REPORT_TYPE"
           echo "=========================================="
-          echo ""
 
-          # 循环每只股票分析并推送
-          for stock in "${STOCKS_ARRAY[@]}"; do
-            echo "🔹 开始分析股票 $stock"
-            python main.py --stocks "$stock" --single-notify
+          # 分析所有股票，关闭单股推送
+          python main.py --no-single-notify
 
-            if [ $? -eq 0 ]; then
-              echo "✅ 股票 $stock 分析完成，PushPlus 推送成功"
-            else
-              echo "❌ 股票 $stock 分析失败或 PushPlus 推送失败"
-            fi
-          done
+          echo "✅ 所有股票分析完成，准备发送汇总消息..."
+
+          # 调用脚本统一推送 PushPlus
+          python scripts/send_pushplus_summary.py \
+            --token $PUSHPLUS_TOKEN \
+            --stocks "$STOCK_LIST" \
+            --report reports/summary_report.md
+
+          echo "✅ PushPlus 汇总推送成功"
 
       - name: 上传分析报告
         uses: actions/upload-artifact@v4
@@ -96,22 +68,3 @@ jobs:
             reports/
             logs/
           retention-days: 30
-
-      - name: 显示每股完整日志
-        if: always()
-        run: |
-          echo ""
-          echo "=========================================="
-          echo "📊 每股完整分析日志"
-          echo "=========================================="
-
-          LOG_FILE=$(ls -t logs/stock_analysis_*.log | head -n1)
-          if [ -f "$LOG_FILE" ]; then
-            IFS=',' read -ra STOCKS_ARRAY <<< "$STOCK_LIST"
-            for stock in "${STOCKS_ARRAY[@]}"; do
-              echo ""
-              echo "================== $stock =================="
-              grep -A 1000 -E "^$stock:" "$LOG_FILE" || echo "⚠️ $stock 日志未找到"
-            done
-          else
-            echo "⚠️ 未找到日志文件"
