@@ -1,58 +1,91 @@
 name: 每日股票分析
 
 on:
-  # 定时触发（北京时间 18:00，周一到周五）
   schedule:
-    - cron: '0 10 * * 1-5'
-  # 手动触发
-  workflow_dispatch: {}
+    - cron: '0 10 * * 1-5'  # 每天北京时间 18:00
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '运行模式'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - market-only
+          - stocks-only
+
+concurrency:
+  group: stock-analysis
+  cancel-in-progress: false
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    
     steps:
-      # 检出仓库代码
+      - name: 随机延迟启动
+        run: sleep $((RANDOM % 60))
+
       - name: 检出代码
         uses: actions/checkout@v4
 
-      # 设置 Python 环境
       - name: 设置 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
-      # 安装依赖
       - name: 安装依赖
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install yfinance matplotlib pandas requests pillow mplfinance ta
 
-      # 创建目录
-      - name: 创建目录
-        run: |
-          mkdir -p reports charts logs
+      - name: 创建必要目录
+        run: mkdir -p data logs reports
 
-      # 执行 Python 分析
       - name: 执行每日股票分析
         env:
           STOCK_LIST: ${{ secrets.STOCK_LIST }}
-          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: |
-          echo "=========================================="
+          MODE="${{ github.event.inputs.mode || 'full' }}"
           echo "🚀 每日股票分析（汇总推送）"
           echo "⏰ 时间: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
+          echo "🎯 运行模式: $MODE"
           echo "📊 自选股: $STOCK_LIST"
-          echo "=========================================="
-          python scripts/daily_analysis.py
+          if [ "$MODE" = "market-only" ]; then
+            python scripts/daily_analysis.py --market-review
+          elif [ "$MODE" = "stocks-only" ]; then
+            python scripts/daily_analysis.py --no-market-review
+          else
+            python scripts/daily_analysis.py
 
-      # 上传分析报告（可选查看）
+      - name: 汇总报告并推送 PushPlus
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: python scripts/summary_push.py
+
       - name: 上传分析报告
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: stock-analysis-reports-${{ github.run_number }}
+          name: analysis-reports-${{ github.run_number }}
           path: |
             reports/
-            charts/
+            logs/
           retention-days: 30
+
+      - name: 显示运行结果
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "📊 分析完成"
+          if [ -d "reports" ] && [ "$(ls -A reports 2>/dev/null)" ]; then
+            echo "生成的报告文件:"
+            ls -la reports/
+          else
+            echo "⚠️ 未生成报告文件"
