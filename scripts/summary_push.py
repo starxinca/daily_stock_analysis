@@ -4,12 +4,12 @@ import requests
 # ===============================
 # 配置区域
 # ===============================
-PUSHPLUS_TOKEN = os.environ.get("PUSHPLUS_TOKEN", "")  # 从 workflow secrets 读取
-REPORTS_DIR = "./reports"  # 分析报告目录
-MAX_CHARS = 1900           # 推送限制，避免太长被截断
+PUSHPLUS_TOKEN = os.environ.get("PUSHPLUS_TOKEN", "")
+REPORTS_DIR = "./reports"
+MAX_CHARS = 1900
 
 # ===============================
-# 读取所有报告文件
+# 读取有效报告
 # ===============================
 def load_reports(reports_dir):
     summary_list = []
@@ -23,11 +23,11 @@ def load_reports(reports_dir):
             path = os.path.join(reports_dir, f)
             with open(path, "r", encoding="utf-8") as file:
                 content = file.read().strip()
-                if content:
+                if content and "可能退市" not in content:  # 跳过无效股票
                     summary_list.append(content)
     
     if not summary_list:
-        print("⚠️ 没有找到有效报告内容")
+        print("⚠️ 没有有效报告可推送")
     
     return "\n\n".join(summary_list)
 
@@ -68,4 +68,4 @@ if __name__ == "__main__":
     if summary_text:
         push_pushplus(summary_text)
     else:
-        print("⚠️ 没有生成任何报告内容，跳过推送")
+        print("⚠️ 没有生成有效报告内容，跳过推送")
