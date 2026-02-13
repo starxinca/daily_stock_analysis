@@ -70,13 +70,20 @@ jobs:
           echo "=========================================="
           echo ""
 
-          # 执行分析，确保 PushPlus 推送
+          # 执行分析（新版 main.py 不需要 --pushplus 参数）
           if [ "$MODE" = "market-only" ]; then
-            python main.py --market-review --pushplus
+            python main.py --market-review
           elif [ "$MODE" = "stocks-only" ]; then
-            python main.py --no-market-review --pushplus
+            python main.py --no-market-review
           else
-            python main.py --pushplus
+            python main.py
+          fi
+
+          # 日志提示：推送是否已执行
+          if [ $? -eq 0 ]; then
+            echo "✅ PushPlus 推送命令已执行（请检查微信是否收到消息）"
+          else
+            echo "❌ PushPlus 推送失败，请查看 main.py 日志"
           fi
       
       - name: 上传分析报告
