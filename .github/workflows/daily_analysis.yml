@@ -70,4 +70,4 @@ jobs:
             echo "⚠️ summary.md 未生成"
             exit 1
 
-# ⚠️ 最后一行必须保留空行（EOF 换行），防止 Bash 报错
+# ⚠️ 最后一行一定保留空行（EOF 换行）
