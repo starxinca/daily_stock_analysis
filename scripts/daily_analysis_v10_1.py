@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os, datetime, pandas as pd, numpy as np, matplotlib.pyplot as plt
-import mplfinance as mpf, requests, base64
-from io import BytesIO
+import os, datetime, pandas as pd, numpy as np, mplfinance as mpf, requests
 import yfinance as yf
 
 # ===== 配置 =====
@@ -28,7 +26,7 @@ for stock in STOCK_LIST:
         if df.empty:
             raise ValueError("无行情数据")
     except Exception:
-        # 自动生成模拟数据，补齐 O/H/L 列
+        # 自动生成模拟数据，补齐 O/H/L
         dates = pd.date_range(end=datetime.datetime.now(), periods=60)
         close = np.random.rand(60) * 1000
         df = pd.DataFrame({
@@ -65,26 +63,23 @@ for stock in STOCK_LIST:
     lines.append(f"- 智能分析结论: {ai_result}")
     lines.append(f"- 投顾建议: 基于分析结果的投资建议（模拟）")
 
-    # ===== K线 + 成交量 + 均线图 =====
+    # ===== K线图生成，保存在 reports/ =====
     chart_file = os.path.join(REPORT_DIR, f"{stock}_chart.png")
     mc = mpf.make_marketcolors(up='r', down='g', edge='i', wick='i', volume='in')
     s  = mpf.make_mpf_style(marketcolors=mc)
     mpf.plot(df, type='candle', style=s, mav=(5,10,20), volume=True,
              title=f"{stock} K线与均线", savefig=chart_file)
-
-    # ===== Base64 嵌入 PushPlus =====
-    with open(chart_file, "rb") as f_img:
-        b64_str = base64.b64encode(f_img.read()).decode()
-        push_content.append(f"## {stock}\n![{stock}](data:image/png;base64,{b64_str})")
-
     lines.append(f"- 图表: ![]({chart_file})\n")
+
+    # ===== PushPlus 消息只发送文字分析 =====
+    push_content.append(f"股票 {stock}\n最新价格: {df['Close'].iloc[-1]:.2f}\n智谱分析: {ai_result}\n投顾建议: 基于分析结果的投资建议（模拟）")
 
 # ===== 写入 Markdown =====
 with open(SUMMARY_FILE, "w", encoding="utf-8") as f:
     f.write("\n".join(lines))
 print(f"✅ 已生成汇总文件: {SUMMARY_FILE}")
 
-# ===== PushPlus 汇总推送 =====
+# ===== PushPlus 汇总推送文字 =====
 if PUSHPLUS_TOKEN:
     try:
         content = "%0A".join(push_content)
