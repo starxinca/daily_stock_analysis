@@ -23,16 +23,22 @@ for stock in STOCK_LIST:
     # ===== 获取行情 =====
     try:
         ticker = yf.Ticker(f"{stock}.SS")
-        hist = ticker.history(period="60d")  # 最近60天
-        df = hist[['Close', 'Volume']]
+        hist = ticker.history(period="60d")
+        df = hist[['Open','High','Low','Close','Volume']]
         if df.empty:
             raise ValueError("无行情数据")
     except Exception:
+        # 自动生成模拟数据，补齐 O/H/L 列
         dates = pd.date_range(end=datetime.datetime.now(), periods=60)
+        close = np.random.rand(60) * 1000
         df = pd.DataFrame({
-            "Close": np.random.rand(60) * 1000,
-            "Volume": np.random.randint(1000, 10000, size=60)
+            "Close": close,
+            "Open": np.roll(close,1),
+            "High": close * (1 + 0.01*np.random.rand(60)),
+            "Low": close * (1 - 0.01*np.random.rand(60)),
+            "Volume": np.random.randint(1000,10000,60)
         }, index=dates)
+        df['Open'].iloc[0] = df['Close'].iloc[0]
 
     # ===== 技术指标 =====
     df['MA5'] = df['Close'].rolling(5).mean()
