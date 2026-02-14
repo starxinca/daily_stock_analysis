@@ -20,9 +20,15 @@ jobs:
           pip install --upgrade pip
           pip install matplotlib mplfinance pandas numpy requests pillow yfinance
 
-      - name: 执行全功能分析 (v10.1)
+      - name: 执行全功能分析
         run: python scripts/daily_analysis_v10_1.py
         env:
           STOCK_LIST: ${{ secrets.STOCK_LIST }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+
+      - name: 上传报告 Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: daily-stock-report
+          path: reports/
