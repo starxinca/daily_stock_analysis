@@ -1,73 +1,27 @@
 name: 每日股票分析
 
 on:
-  schedule:
-    - cron: '0 10 * * 1-5'   # 每周一到周五北京时间 18:00
   workflow_dispatch:
-    inputs:
-      mode:
-        description: '运行模式'
-        required: true
-        default: 'full'
-        type: choice
-        options:
-          - full
-          - market-only
-          - stocks-only
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
     steps:
-      - name: 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 设置 Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
-      - name: 安装依赖
+      - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install matplotlib
-          pip install mplfinance
+          pip install matplotlib mplfinance requests
 
-      - name: 创建目录
-        run: mkdir -p data logs reports
-
-      - name: 执行每日股票分析并推送汇总
-        shell: bash
+      - name: Run daily stock analysis
+        run: python scripts/daily_analysis.py
         env:
           STOCK_LIST: ${{ secrets.STOCK_LIST }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-        run: |
-          set -e
-
-          echo "=========================================="
-          echo "🚀 每日股票分析（汇总推送）"
-          echo "⏰ 时间: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
-          echo "📊 自选股: $STOCK_LIST"
-          echo "=========================================="
-
-          if [ -f "scripts/daily_analysis.py" ]; then
-            python scripts/daily_analysis.py
-          else
-            echo "⚠️ daily_analysis.py 不存在"
-            exit 1
-          fi
-
-          SUMMARY_FILE="reports/summary.md"
-          if [ -f "$SUMMARY_FILE" ]; then
-            CONTENT=$(cat "$SUMMARY_FILE" | sed ':a;N;$!ba;s/\n/%0A/g')
-            RESPONSE=$(curl -s "http://www.pushplus.plus/send?token=$PUSHPLUS_TOKEN&title=每日股票分析&content=$CONTENT")
-            echo "✅ PushPlus 推送成功: $RESPONSE"
-          else
-            echo "⚠️ summary.md 未生成"
-            exit 1
-
-# ⚠️ 最后一行一定保留空行（EOF 换行）
