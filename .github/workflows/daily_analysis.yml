@@ -2,7 +2,7 @@ name: 每日股票分析
 
 on:
   schedule:
-    - cron: '0 10 * * 1-5'
+    - cron: '0 10 * * 1-5'   # 每周一到周五北京时间 18:00
   workflow_dispatch:
     inputs:
       mode:
@@ -14,10 +14,6 @@ on:
           - full
           - market-only
           - stocks-only
-
-concurrency:
-  group: stock-analysis
-  cancel-in-progress: false
 
 jobs:
   analyze:
@@ -38,6 +34,8 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
+          pip install matplotlib
+          pip install mplfinance
 
       - name: 创建目录
         run: mkdir -p data logs reports
@@ -55,6 +53,7 @@ jobs:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           REPORT_TYPE: ${{ secrets.REPORT_TYPE || 'full' }}
         run: |
+          set -e
           MODE="${{ github.event.inputs.mode || 'full' }}"
           echo "=========================================="
           echo "🚀 每日股票分析（汇总推送）"
@@ -63,7 +62,7 @@ jobs:
           echo "📊 自选股: $STOCK_LIST"
           echo "=========================================="
 
-          # 执行 Python 分析
+          # 执行分析
           if [ "$MODE" = "market-only" ]; then
             python scripts/daily_analysis.py --market-review
           elif [ "$MODE" = "stocks-only" ]; then
@@ -72,12 +71,11 @@ jobs:
             python scripts/daily_analysis.py
           fi
 
-          # 汇总报告文件
+          # 汇总推送
           SUMMARY_FILE="reports/summary.md"
           if [ -f "$SUMMARY_FILE" ]; then
             CONTENT=$(cat "$SUMMARY_FILE" | sed ':a;N;$!ba;s/\n/%0A/g')
-            curl -s "http://www.pushplus.plus/send?token=$PUSHPLUS_TOKEN&title=每日股票分析&content=$CONTENT"
-            echo "✅ PushPlus 推送成功"
+            RESPONSE=$(curl -s "http://www.pushplus.plus/send?token=$PUSHPLUS_TOKEN&title=每日股票分析&content=$CONTENT")
+            echo "✅ PushPlus 推送成功: $RESPONSE"
           else
             echo "⚠️ 未生成 summary.md 文件，推送失败"
-
