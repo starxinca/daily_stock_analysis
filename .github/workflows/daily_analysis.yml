@@ -7,7 +7,7 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout 代码
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -15,13 +15,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: |
           pip install --upgrade pip
-          pip install matplotlib mplfinance requests
+          pip install matplotlib mplfinance pandas numpy requests pillow
 
-      - name: Run daily stock analysis
-        run: python scripts/daily_analysis.py
+      - name: 执行全功能分析 (v10)
+        run: python scripts/daily_analysis_v10.py
         env:
           STOCK_LIST: ${{ secrets.STOCK_LIST }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}  # 智谱 AI Key
