@@ -43,42 +43,31 @@ jobs:
       - name: 执行每日股票分析并推送汇总
         shell: bash
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
-          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
           STOCK_LIST: ${{ secrets.STOCK_LIST }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-          REPORT_TYPE: ${{ secrets.REPORT_TYPE || 'full' }}
         run: |
           set -e
 
-          MODE="${{ github.event.inputs.mode || 'full' }}"
           echo "=========================================="
           echo "🚀 每日股票分析（汇总推送）"
           echo "⏰ 时间: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
-          echo "🎯 运行模式: $MODE"
           echo "📊 自选股: $STOCK_LIST"
           echo "=========================================="
 
-          # 执行分析
-          if [ "$MODE" = "market-only" ]; then
-            python scripts/daily_analysis.py --market-review
-          elif [ "$MODE" = "stocks-only" ]; then
-            python scripts/daily_analysis.py --no-market-review
-          else
+          if [ -f "scripts/daily_analysis.py" ]; then
             python scripts/daily_analysis.py
+          else
+            echo "⚠️ daily_analysis.py 不存在"
+            exit 1
           fi
 
-          # 汇总推送
           SUMMARY_FILE="reports/summary.md"
           if [ -f "$SUMMARY_FILE" ]; then
             CONTENT=$(cat "$SUMMARY_FILE" | sed ':a;N;$!ba;s/\n/%0A/g')
             RESPONSE=$(curl -s "http://www.pushplus.plus/send?token=$PUSHPLUS_TOKEN&title=每日股票分析&content=$CONTENT")
             echo "✅ PushPlus 推送成功: $RESPONSE"
           else
-            echo "⚠️ 未生成 summary.md 文件，推送失败"
+            echo "⚠️ summary.md 未生成"
+            exit 1
 
-# ⚠️ 注意：最后一定要有一个空行
+# ⚠️ 最后一行必须保留空行（EOF 换行），防止 Bash 报错
