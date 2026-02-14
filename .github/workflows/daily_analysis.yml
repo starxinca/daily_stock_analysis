@@ -54,6 +54,7 @@ jobs:
           REPORT_TYPE: ${{ secrets.REPORT_TYPE || 'full' }}
         run: |
           set -e
+
           MODE="${{ github.event.inputs.mode || 'full' }}"
           echo "=========================================="
           echo "🚀 每日股票分析（汇总推送）"
@@ -79,3 +80,5 @@ jobs:
             echo "✅ PushPlus 推送成功: $RESPONSE"
           else
             echo "⚠️ 未生成 summary.md 文件，推送失败"
+
+# ⚠️ 注意：最后一定要有一个空行
